@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::thread::current;
 
 pub struct Scanner {
@@ -6,9 +7,10 @@ pub struct Scanner {
     tokens: Vec<Token>,
     source: Vec<u8>,
     line: u16,
+    keywords: HashMap<String, TokenType>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 enum TokenType {
     // Single-character tokens.
     LeftParen,
@@ -82,12 +84,35 @@ pub fn scan(input: String) -> Vec<Token> {
 
 impl Scanner {
     pub fn new(source: String) -> Scanner {
+        let keywords: HashMap<String, TokenType> = vec![
+            ("and", TokenType::And),
+            ("class", TokenType::Class),
+            ("else", TokenType::Else),
+            ("false", TokenType::False),
+            ("for", TokenType::For),
+            ("fun", TokenType::Fun),
+            ("if", TokenType::If),
+            ("nil", TokenType::Nil),
+            ("or", TokenType::Or),
+            ("print", TokenType::Print),
+            ("return", TokenType::Return),
+            ("super", TokenType::Super),
+            ("this", TokenType::This),
+            ("true", TokenType::True),
+            ("var", TokenType::Var),
+            ("while", TokenType::While),
+        ]
+        .into_iter()
+        .map(|(k, v)| (String::from(k), v))
+        .collect();
+
         return Scanner {
             current: 0,
             start: 0,
             tokens: Vec::new(),
             line: 0,
             source: source.into_bytes(),
+            keywords,
         };
     }
 
@@ -119,10 +144,10 @@ impl Scanner {
             '"' => self.add_string_literal(),
             '/' => {
                 let n = self.peek();
-                if n != Some('/') {
+                if n != '/' {
                     self.add_token(TokenType::Slash)
                 } else {
-                    while self.peek() != Some('\n') {
+                    while self.peek() != '\n' {
                         self.advance();
                     }
                 }
@@ -130,29 +155,39 @@ impl Scanner {
             '\n' => self.line = self.line + 1,
             ' ' | '\t' | '\r' => {}
             _ => {
-                println!("Unrecognised character {}", c);
+                if c.is_digit(10) {
+                    self.add_number_literal();
+                } else if c.is_alphanumeric() {
+                    self.add_identifier();
+                } else {
+                    println!("Unrecognised character {}", c);
+                }
             }
         }
     }
 
     fn add_double_token(&mut self, next_char: char, lhs: TokenType, rhs: TokenType) {
-        if let Some(c) = self.peek() {
-            if c == next_char {
-                self.advance();
-                self.add_token(lhs);
-            } else {
-                self.add_token(rhs);
-            }
+        if self.peek() == next_char {
+            self.advance();
+            self.add_token(lhs);
         } else {
             self.add_token(rhs);
         }
     }
 
-    fn peek(&self) -> Option<char> {
+    fn peek(&self) -> char {
         if self.current < self.source.len() {
-            Some(self.source[self.current] as char)
+            self.source[self.current] as char
         } else {
-            None
+            '\0'
+        }
+    }
+
+    fn peek_next(&self) -> char {
+        if self.current + 1 < self.source.len() {
+            self.source[self.current + 1] as char
+        } else {
+            '\0'
         }
     }
 
@@ -165,12 +200,8 @@ impl Scanner {
     }
 
     fn add_string_literal(&mut self) {
-        while let Some(t) = self.peek() {
-            if t == '"' {
-                break;
-            }
-
-            if t == '\n' {
+        while self.peek() != '"' {
+            if self.peek() == '\n' {
                 self.line = self.line + 1;
             }
             self.advance();
@@ -182,6 +213,42 @@ impl Scanner {
             String::from_utf8(self.source[self.start + 1..self.current - 1].to_vec()).unwrap(),
         );
         self.add_token_with_literal(TokenType::String, Some(string));
+    }
+
+    fn add_number_literal(&mut self) {
+        while self.peek().is_digit(10) {
+            self.advance();
+        }
+
+        if self.peek() == '.' && self.peek_next().is_digit(10) {
+            self.advance(); // consume .
+
+            while self.peek().is_digit(10) {
+                self.advance();
+            }
+        }
+
+        let num: f64 = self.get_current_string().parse().unwrap();
+        let num_literal = Literal::Number(num);
+        self.add_token_with_literal(TokenType::Number, Some(num_literal));
+    }
+
+    fn get_current_string(&self) -> String {
+        String::from_utf8(self.source[self.start..self.current].to_vec()).unwrap()
+    }
+
+    fn add_identifier(&mut self) {
+        while self.peek().is_alphanumeric() {
+            self.advance();
+        }
+
+        let str = self.get_current_string();
+        let token = self.keywords.get(str.as_str());
+        if let Some(t) = token {
+            self.add_token(*t);
+        } else {
+            self.add_token(TokenType::Identifier);
+        }
     }
 
     fn add_token_with_literal(&mut self, token: TokenType, literal: Option<Literal>) {
@@ -250,19 +317,42 @@ mod tests {
         assert_eq!(scanner.tokens.get(0).unwrap().token_type, TokenType::Slash);
     }
 
-    // #[test]
-    // fn string_literal_tokens() {
-    //     let input = String::from("\"hello\"");
-    //     let mut scanner = Scanner::new(input);
-    //     scanner.scan();
-    //
-    //     let token = scanner.tokens.get(0).unwrap();
-    //     assert_eq!(token.token_type, TokenType::String);
-    //     assert_eq!(
-    //         token.literal.unwrap(),
-    //         Literal::String(String::from("hello"))
-    //     );
-    // }
+    // Having trouble with this test
+    #[test]
+    fn string_literal_tokens() {
+        let input = String::from("\"hello\"");
+        let mut scanner = Scanner::new(input);
+        scanner.scan();
+
+        let token = scanner.tokens.get(0).unwrap();
+        assert_eq!(token.token_type, TokenType::String);
+        let expected_str = String::from("hello");
+        assert!(matches!(
+            token.literal.as_ref().unwrap(),
+            Literal::String(expected_str)
+        ));
+    }
+
+    // Having trouble with this test
+    #[test]
+    fn number_literal_tokens() {
+        let input = String::from("10.1234");
+        let mut scanner = Scanner::new(input);
+        scanner.scan();
+
+        let token = scanner.tokens.get(0).unwrap();
+        assert_eq!(token.token_type, TokenType::Number);
+    }
+
+    #[test]
+    fn identifier_reserved_tokens() {
+        let input = String::from("while");
+        let mut scanner = Scanner::new(input);
+        scanner.scan();
+
+        let token = scanner.tokens.get(0).unwrap();
+        assert_eq!(token.token_type, TokenType::While);
+    }
 
     #[test]
     fn stress_test_with_simple_chars() {
