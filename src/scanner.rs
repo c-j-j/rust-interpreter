@@ -2,8 +2,10 @@ use std::thread::current;
 
 pub struct Scanner {
     current: usize,
-    tokens: Vec<Token>,
-    source: String,
+    start: usize,
+    pub tokens: Vec<Token>,
+    source: Vec<u8>,
+    line: u16,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -57,52 +59,68 @@ enum TokenType {
     EOF,
 }
 
+enum Literal {
+    String,
+    Number,
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Token {
     token_type: TokenType,
+    lexeme: Vec<u8>,
+    line: u16,
 }
 
 impl Scanner {
     pub fn new(source: String) -> Scanner {
         return Scanner {
             current: 0,
+            start: 0,
             tokens: Vec::new(),
-            source,
+            line: 0,
+            source: source.into_bytes(),
         };
     }
 
     pub fn scan(&mut self) {
-        while let Some(c) = self.source.chars().nth(self.current) {
-            self.advance();
-            match c {
-                ';' => self.add_token(TokenType::Semicolon),
-                '{' => self.add_token(TokenType::LeftBrace),
-                '}' => self.add_token(TokenType::RightBrace),
-                '(' => self.add_token(TokenType::LeftParen),
-                ')' => self.add_token(TokenType::RightParen),
-                ',' => self.add_token(TokenType::Comma),
-                '.' => self.add_token(TokenType::Dot),
-                '-' => self.add_token(TokenType::Minus),
-                '+' => self.add_token(TokenType::Plus),
-                '*' => self.add_token(TokenType::Star),
-                '=' => self.add_double_token('=', TokenType::EqualEqual, TokenType::Equal),
-                '!' => self.add_double_token('=', TokenType::BangEqual, TokenType::Bang),
-                '>' => self.add_double_token('=', TokenType::GreaterEqual, TokenType::Greater),
-                '<' => self.add_double_token('=', TokenType::LessEqual, TokenType::Less),
-                '/' => {
-                    let n = self.peek();
-                    if n != Some('/') {
-                        self.add_token(TokenType::Slash)
-                    } else {
-                        while self.peek() != Some('\n') {
-                            self.advance();
-                        }
+        while self.current < self.source.len() {
+            self.scan_next();
+        }
+    }
+
+    fn scan_next(&mut self) {
+        let c = self.source[self.current] as char;
+        self.start = self.current;
+        self.advance();
+        match c {
+            ';' => self.add_token(TokenType::Semicolon),
+            '{' => self.add_token(TokenType::LeftBrace),
+            '}' => self.add_token(TokenType::RightBrace),
+            '(' => self.add_token(TokenType::LeftParen),
+            ')' => self.add_token(TokenType::RightParen),
+            ',' => self.add_token(TokenType::Comma),
+            '.' => self.add_token(TokenType::Dot),
+            '-' => self.add_token(TokenType::Minus),
+            '+' => self.add_token(TokenType::Plus),
+            '*' => self.add_token(TokenType::Star),
+            '=' => self.add_double_token('=', TokenType::EqualEqual, TokenType::Equal),
+            '!' => self.add_double_token('=', TokenType::BangEqual, TokenType::Bang),
+            '>' => self.add_double_token('=', TokenType::GreaterEqual, TokenType::Greater),
+            '<' => self.add_double_token('=', TokenType::LessEqual, TokenType::Less),
+            '/' => {
+                let n = self.peek();
+                if n != Some('/') {
+                    self.add_token(TokenType::Slash)
+                } else {
+                    while self.peek() != Some('\n') {
+                        self.advance();
                     }
                 }
-                ' ' | '\t' | '\n' | '\r' => {}
-                _ => {
-                    println!("Unrecognised character {}", c);
-                }
+            }
+            '\n' => self.line = self.line + 1,
+            ' ' | '\t' | '\r' => {}
+            _ => {
+                println!("Unrecognised character {}", c);
             }
         }
     }
@@ -121,7 +139,11 @@ impl Scanner {
     }
 
     fn peek(&self) -> Option<char> {
-        self.source.chars().nth(self.current)
+        if self.current < self.source.len() {
+            Some(self.source[self.current] as char)
+        } else {
+            None
+        }
     }
 
     fn advance(&mut self) {
@@ -129,7 +151,12 @@ impl Scanner {
     }
 
     fn add_token(&mut self, token: TokenType) {
-        self.tokens.push(Token { token_type: token });
+        let lexeme = self.source[self.start..self.current].to_vec();
+        self.tokens.push(Token {
+            lexeme,
+            token_type: token,
+            line: self.line,
+        });
     }
 }
 
@@ -181,6 +208,15 @@ mod tests {
         assert_eq!(scanner.tokens, []);
 
         let input = String::from("/");
+        let mut scanner = Scanner::new(input);
+        scanner.scan();
+
+        assert_eq!(scanner.tokens.get(0).unwrap().token_type, TokenType::Slash);
+    }
+
+    #[test]
+    fn string_literal_tokens() {
+        let input = String::from("\"hello\"");
         let mut scanner = Scanner::new(input);
         scanner.scan();
 
