@@ -12,9 +12,8 @@ fn main() {
         if buffer.trim().is_empty() {
             break;
         }
-        let mut scanner = Scanner::new(buffer);
-        scanner.scan();
+        let tokens = scanner::scan(buffer);
 
-        println!("{:?}", scanner.tokens);
+        println!("{:?}", tokens);
     }
 }
