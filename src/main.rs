@@ -1,5 +1,5 @@
+mod parser;
 mod scanner;
-use scanner::Scanner;
 use std::io;
 use std::io::Write;
 
@@ -13,7 +13,9 @@ fn main() {
             break;
         }
         let tokens = scanner::scan(buffer);
+        parser::parse(tokens);
+        // printAst(ast);
 
-        println!("{:?}", tokens);
+        // println!("{:?}", tokens);
     }
 }
