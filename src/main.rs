@@ -14,8 +14,5 @@ fn main() {
         }
         let tokens = scanner::scan(buffer);
         parser::parse(tokens);
-        // printAst(ast);
-
-        // println!("{:?}", tokens);
     }
 }

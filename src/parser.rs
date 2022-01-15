@@ -313,3 +313,56 @@ fn test_parser() {
         ))
     )
 }
+
+fn print_ast(expr: &Expr) -> String {
+    match expr {
+        Expr::Binary(left, right, op) => {
+            let l = print_ast(left);
+            let r = print_ast(right);
+            let oper = print_binary_op(op);
+            return format!("({} {} {})", oper, l, r);
+        }
+        Expr::Unary(expr, op) => {
+            let l = print_ast(expr);
+            let oper = print_unary_op(op);
+            return format!("{}{}", oper, l);
+        }
+        Expr::Literal(lit) => match lit {
+            LiteralValue::Number(num) => num.to_string(),
+            LiteralValue::String(str) => str.to_string(),
+            LiteralValue::Boolean(bool) => bool.to_string(),
+            LiteralValue::Nil => String::from("nil"),
+        },
+    }
+}
+
+fn print_binary_op(op: &BinaryOperator) -> &str {
+    match op {
+        BinaryOperator::Minus => "+",
+        BinaryOperator::Plus => "-",
+        BinaryOperator::Slash => "/",
+        BinaryOperator::Star => "*",
+        BinaryOperator::BangEqual => "!=",
+        BinaryOperator::EqualEqual => "==",
+        BinaryOperator::Greater => ">",
+        BinaryOperator::GreaterEqual => ">=",
+        BinaryOperator::Less => "<",
+        BinaryOperator::LessEqual => "<=",
+    }
+}
+
+fn print_unary_op(op: &UnaryOperator) -> &str {
+    match op {
+        UnaryOperator::Bang => "!",
+        UnaryOperator::Minus => "-",
+    }
+}
+
+#[test]
+fn test_parser_with_formatter() {
+    let input = "3 > 4 + 1 * (1 + 2)";
+    let tokens = scanner::scan(String::from(input));
+    let expr = parse(tokens).unwrap();
+    let ast = print_ast(&expr);
+    assert_eq!(ast, "(> 3 (- 4 (* 1 (- 1 2))))")
+}
