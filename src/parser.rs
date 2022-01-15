@@ -1,18 +1,15 @@
 use crate::scanner;
-use crate::scanner::{Token, TokenType};
-use std::any::Any;
-use std::fmt::{Binary, Error};
+use crate::scanner::{Literal, Token, TokenType};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Binary(Box<Expr>, Box<Expr>, BinaryOperator),
-    Unary(UnaryOperator, Box<Expr>),
+    Unary(Box<Expr>, UnaryOperator),
     Literal(LiteralValue),
 }
 
 #[derive(Debug, Eq, PartialEq)]
-enum BinaryOperator {
-    EqualsEquals,
+pub enum BinaryOperator {
     Minus,
     Plus,
     Slash,
@@ -26,21 +23,24 @@ enum BinaryOperator {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-enum UnaryOperator {
+pub enum UnaryOperator {
     Bang,
-    Plus,
+    Minus,
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum LiteralValue {
-    Number(i32),
+#[derive(Debug, PartialEq)]
+pub enum LiteralValue {
+    Number(f64),
     String(String),
     Boolean(bool),
+    Nil,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 enum ErrorType {
     InvalidBinaryOperator,
+    InvalidUnaryOperator,
+    UnexpectedCharacter,
 }
 
 struct Parser {
@@ -77,7 +77,7 @@ impl Parser {
             Ok(left) => {
                 let mut expr = left;
                 while self.match_token(&[TokenType::BangEqual, TokenType::EqualEqual]) {
-                    let operator = self.previous();
+                    let operator = self.previous_token_type();
                     match parse_binary_operator(operator) {
                         Ok(binary_op) => match self.comparison() {
                             Ok(right) => {
@@ -104,7 +104,7 @@ impl Parser {
                     TokenType::Less,
                     TokenType::LessEqual,
                 ]) {
-                    let operator = self.previous();
+                    let operator = self.previous_token_type();
                     match parse_binary_operator(operator) {
                         Ok(binary_op) => {
                             match self.term() {
@@ -123,6 +123,103 @@ impl Parser {
         };
     }
 
+    fn term(&mut self) -> Result<Expr, ParseError> {
+        return match self.factor() {
+            Ok(left) => {
+                let mut expr = left;
+                while self.match_token(&[TokenType::Minus, TokenType::Plus]) {
+                    let operator = self.previous_token_type();
+                    match parse_binary_operator(operator) {
+                        Ok(binary_op) => {
+                            match self.factor() {
+                                Ok(right) => {
+                                    expr = Expr::Binary(Box::new(expr), Box::new(right), binary_op);
+                                }
+                                Err(right_err) => return Err(right_err),
+                            };
+                        }
+                        Err(err) => return Err(err),
+                    }
+                }
+                Ok(expr)
+            }
+            Err(left_err) => Err(left_err),
+        };
+    }
+
+    fn factor(&mut self) -> Result<Expr, ParseError> {
+        return match self.unary() {
+            Ok(left) => {
+                let mut expr = left;
+                while self.match_token(&[TokenType::Slash, TokenType::Star]) {
+                    let operator = self.previous_token_type();
+                    match parse_binary_operator(operator) {
+                        Ok(binary_op) => {
+                            match self.unary() {
+                                Ok(right) => {
+                                    expr = Expr::Binary(Box::new(expr), Box::new(right), binary_op);
+                                }
+                                Err(right_err) => return Err(right_err),
+                            };
+                        }
+                        Err(err) => return Err(err),
+                    }
+                }
+                Ok(expr)
+            }
+            Err(left_err) => Err(left_err),
+        };
+    }
+
+    fn unary(&mut self) -> Result<Expr, ParseError> {
+        if self.match_token(&[TokenType::Bang, TokenType::Minus]) {
+            let operator = self.previous_token_type();
+            return match self.unary() {
+                Ok(expr) => match parse_unary_operator(operator) {
+                    Ok(unary_op) => Ok(Expr::Unary(Box::new(expr), unary_op)),
+                    Err(err) => Err(err),
+                },
+                Err(err) => Err(err),
+            };
+        }
+        self.primary()
+    }
+
+    fn primary(&mut self) -> Result<Expr, ParseError> {
+        if self.match_token(&[TokenType::False]) {
+            return Ok(Expr::Literal(LiteralValue::Boolean(false)));
+        }
+        if self.match_token(&[TokenType::True]) {
+            return Ok(Expr::Literal(LiteralValue::Boolean(true)));
+        }
+        if self.match_token(&[TokenType::Nil]) {
+            return Ok(Expr::Literal(LiteralValue::Nil));
+        }
+
+        if self.match_token(&[TokenType::Number]) {
+            let number = self.previous_token();
+            return match number.literal.as_ref().unwrap() {
+                Literal::String(string) => Ok(Expr::Literal(LiteralValue::String(string.clone()))),
+                Literal::Number(number) => Ok(Expr::Literal(LiteralValue::Number(*number))),
+            };
+        }
+
+        if self.match_token(&[TokenType::LeftParen]) {
+            let expr = self.expression();
+
+            if let Err(err) = self.consume(TokenType::RightParen) {
+                return Err(err);
+            }
+            return expr;
+        }
+
+        let last = self.peek();
+        Err(ParseError {
+            error_type: ErrorType::UnexpectedCharacter,
+            failed_token_type: last.map(|t| t.token_type).unwrap_or(TokenType::EOF),
+        })
+    }
+
     fn match_token(&mut self, tokens: &[TokenType]) -> bool {
         for token in tokens {
             if self.check(token) {
@@ -131,6 +228,17 @@ impl Parser {
             }
         }
         false
+    }
+
+    fn consume(&mut self, token_type: TokenType) -> Result<(), ParseError> {
+        if self.peek().map(|t| t.token_type) == Some(token_type) {
+            self.advance();
+            return Ok(());
+        }
+        Err(ParseError {
+            error_type: ErrorType::UnexpectedCharacter,
+            failed_token_type: token_type,
+        })
     }
 
     fn advance(&mut self) {
@@ -148,12 +256,12 @@ impl Parser {
         self.tokens.get(self.current)
     }
 
-    fn term(&self) -> Result<Expr, ParseError> {
-        todo!()
+    fn previous_token(&self) -> &Token {
+        self.tokens.get(self.current - 1).unwrap()
     }
 
-    fn previous(&self) -> TokenType {
-        todo!()
+    fn previous_token_type(&self) -> TokenType {
+        self.previous_token().token_type
     }
 
     fn is_at_end(&self) -> bool {
@@ -180,6 +288,17 @@ fn parse_binary_operator(token_type: TokenType) -> Result<BinaryOperator, ParseE
     }
 }
 
+fn parse_unary_operator(token_type: TokenType) -> Result<UnaryOperator, ParseError> {
+    match token_type {
+        TokenType::Minus => Ok(UnaryOperator::Minus),
+        TokenType::Bang => Ok(UnaryOperator::Bang),
+        _ => Err(ParseError {
+            error_type: ErrorType::InvalidUnaryOperator,
+            failed_token_type: token_type,
+        }),
+    }
+}
+
 #[test]
 fn test_parser() {
     let input = "3==4";
@@ -188,9 +307,9 @@ fn test_parser() {
     assert_eq!(
         expr,
         Ok(Expr::Binary(
-            Box::new(Expr::Literal(LiteralValue::Number(3))),
-            Box::new(Expr::Literal(LiteralValue::Number(4))),
-            BinaryOperator::EqualsEquals
+            Box::new(Expr::Literal(LiteralValue::Number(3.))),
+            Box::new(Expr::Literal(LiteralValue::Number(4.))),
+            BinaryOperator::EqualEqual
         ))
     )
 }

@@ -61,7 +61,7 @@ pub enum TokenType {
 }
 
 #[derive(Debug, PartialEq)]
-enum Literal {
+pub enum Literal {
     String(String),
     Number(f64),
 }
@@ -71,7 +71,7 @@ pub struct Token {
     pub token_type: TokenType,
     lexeme: Vec<u8>,
     line: u16,
-    literal: Option<Literal>,
+    pub(crate) literal: Option<Literal>,
 }
 
 pub fn scan(input: String) -> Vec<Token> {
