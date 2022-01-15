@@ -1,5 +1,7 @@
+mod interpreter;
 mod parser;
 mod scanner;
+
 use std::io;
 use std::io::Write;
 
