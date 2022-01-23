@@ -119,6 +119,7 @@ impl Scanner {
         while self.current < self.source.len() {
             self.scan_next();
         }
+        self.add_token(TokenType::EOF);
     }
 
     fn scan_next(&mut self) {
