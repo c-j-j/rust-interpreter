@@ -5,12 +5,14 @@ pub enum Expr {
     Binary(Box<Expr>, Box<Expr>, BinaryOperator),
     Unary(Box<Expr>, UnaryOperator),
     Literal(LiteralValue),
+    Variable(Token),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Statement {
     Expression(Expr),
     Print(Expr),
+    Declaration(Token, Option<Expr>),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -75,7 +77,7 @@ impl Parser {
         let mut statements: Vec<Statement> = vec![];
 
         while !self.is_at_end() {
-            match self.statement() {
+            match self.declaration() {
                 Ok(statement) => {
                     statements.push(statement);
                 }
@@ -83,6 +85,35 @@ impl Parser {
             }
         }
         Ok(statements)
+    }
+
+    fn declaration(&mut self) -> Result<Statement, ParseError> {
+        if self.match_token(&[TokenType::Var]) {
+            return self.declaration_statement();
+        }
+        return self.statement();
+    }
+
+    fn declaration_statement(&mut self) -> Result<Statement, ParseError> {
+        match self.consume(TokenType::Identifier) {
+            Ok(token) => {
+                let mut initialiser: Option<Expr> = None;
+                if self.match_token(&[TokenType::Equal]) {
+                    match self.expression() {
+                        Ok(expr) => {
+                            initialiser = Some(expr);
+                        }
+                        Err(err) => return Err(err),
+                    }
+                }
+
+                match self.consume(TokenType::Semicolon) {
+                    Ok(_) => return Ok(Statement::Declaration(token, initialiser)),
+                    Err(parse_error) => Err(parse_error),
+                }
+            }
+            Err(err) => Err(err),
+        }
     }
 
     fn statement(&mut self) -> Result<Statement, ParseError> {
@@ -239,6 +270,9 @@ impl Parser {
         if self.match_token(&[TokenType::Nil]) {
             return Ok(Expr::Literal(LiteralValue::Nil));
         }
+        if self.match_token(&[TokenType::Identifier]) {
+            return Ok(Expr::Variable(self.previous_token().clone()));
+        }
 
         if self.match_token(&[TokenType::Number]) {
             let number = self.previous_token();
@@ -274,15 +308,24 @@ impl Parser {
         false
     }
 
-    fn consume(&mut self, token_type: TokenType) -> Result<(), ParseError> {
-        if self.peek().map(|t| t.token_type) == Some(token_type) {
-            self.advance();
-            return Ok(());
+    fn consume(&mut self, token_type: TokenType) -> Result<Token, ParseError> {
+        if let Some(next) = self.peek() {
+            if next.token_type == token_type {
+                let token = next.clone();
+                self.advance();
+                return Ok(token);
+            } else {
+                return Err(ParseError {
+                    error_type: ErrorType::UnexpectedCharacter,
+                    failed_token_type: token_type,
+                });
+            }
         }
-        Err(ParseError {
+
+        return Err(ParseError {
             error_type: ErrorType::UnexpectedCharacter,
-            failed_token_type: token_type,
-        })
+            failed_token_type: TokenType::EOF,
+        });
     }
 
     fn advance(&mut self) {
@@ -364,6 +407,9 @@ fn print_ast(expr: &Expr) -> String {
             LiteralValue::Boolean(bool) => bool.to_string(),
             LiteralValue::Nil => String::from("nil"),
         },
+        Expr::Variable(v) => {
+            return String::from_utf8(v.lexeme.clone()).unwrap();
+        }
     }
 }
 

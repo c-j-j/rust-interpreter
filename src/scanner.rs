@@ -60,18 +60,18 @@ pub enum TokenType {
     EOF,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     String(String),
     Number(f64),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub token_type: TokenType,
-    lexeme: Vec<u8>,
-    line: u16,
-    pub(crate) literal: Option<Literal>,
+    pub lexeme: Vec<u8>,
+    pub line: u16,
+    pub literal: Option<Literal>,
 }
 
 pub fn scan(input: String) -> Vec<Token> {
