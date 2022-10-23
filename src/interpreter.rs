@@ -161,7 +161,7 @@ impl Interpreter {
 
 #[test]
 fn test_parser_with_evaluator() {
-    let input = "var a = 5 + 6 - 2; print a;";
+    let input = "var a = (5 + 6) * 2; print a;";
     let tokens = scanner::scan(String::from(input));
     let statements = parse(tokens).unwrap();
     let result = evaluate(&statements);
