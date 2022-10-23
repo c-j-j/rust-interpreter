@@ -388,6 +388,7 @@ fn parse_unary_operator(token_type: TokenType) -> Result<UnaryOperator, ParseErr
     }
 }
 
+#[allow(dead_code)]
 fn print_ast(expr: &Expr) -> String {
     match expr {
         Expr::Binary(left, right, op) => {
@@ -437,11 +438,18 @@ fn print_unary_op(op: &UnaryOperator) -> &str {
     }
 }
 
-// #[test]
-// fn test_parser_with_formatter() {
-//     let input = "3 > 4 + 1 * (1 + 2)";
-//     let tokens = scanner::scan(String::from(input));
-//     let statements = parse(tokens).unwrap();
-//     let ast = print_ast(&expr);
-//     assert_eq!(ast, "(> 3 (- 4 (* 1 (- 1 2))))")
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::parser::parse;
+//     use crate::scanner;
+//
+//     #[test]
+//     fn test_parser_with_formatter() {
+//         let input = "3 > 4 + 1 * (1 + 2)";
+//         let tokens = scanner::scan(String::from(input));
+//         let statements = parse(tokens).unwrap();
+//         let ast = print_ast(&expr);
+//         assert_eq!(ast, "(> 3 (- 4 (* 1 (- 1 2))))")
+//     }
 // }

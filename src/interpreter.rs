@@ -1,6 +1,6 @@
-use crate::parser::{parse, BinaryOperator, Expr, LiteralValue, Statement};
-use crate::scanner;
 use std::collections::HashMap;
+
+use crate::parser::{BinaryOperator, Expr, LiteralValue, Statement};
 
 #[derive(PartialEq, Debug)]
 pub enum RuntimeError {
@@ -106,10 +106,10 @@ impl Interpreter {
             Expr::Variable(token) => {
                 let name = String::from_utf8(token.lexeme.clone()).unwrap();
                 return match self.env.get(name) {
-                    None => return Ok(Value::Nil),
+                    None => Ok(Value::Nil),
                     Some(value) => {
                         let v = value.clone();
-                        return Ok(v);
+                        Ok(v)
                     }
                 };
             }
@@ -125,7 +125,12 @@ impl Interpreter {
                 }
             }
             Statement::Print(expr) => match self.evaluate_expression(expr) {
-                Ok(value) => println!("{:?}", value),
+                Ok(value) => match value {
+                    Value::Number(num) => println!("{}", num),
+                    Value::String(str) => println!("{}", str),
+                    Value::Bool(bool) => println!("{}", bool),
+                    Value::Nil => println!("nil"),
+                },
                 Err(err) => return Err(err),
             },
             Statement::Declaration(name, expr) => {
@@ -159,11 +164,18 @@ impl Interpreter {
 //     assert_eq!(result, Ok(Value::Number(15.)));
 // }
 
-#[test]
-fn test_parser_with_evaluator() {
-    let input = "var a = (5 + 6) * 2; print a;";
-    let tokens = scanner::scan(String::from(input));
-    let statements = parse(tokens).unwrap();
-    let result = evaluate(&statements);
-    assert_eq!(result.is_ok(), true);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse;
+    use crate::scanner;
+
+    #[test]
+    fn test_interpreter() {
+        let input = "var a = 4 + 5 + 6;";
+        let tokens = scanner::scan(String::from(input));
+        let statements = parse(tokens).unwrap();
+        let result = evaluate(&statements);
+        assert_eq!(result, Ok(()));
+    }
 }
