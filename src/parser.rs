@@ -438,18 +438,49 @@ fn print_unary_op(op: &UnaryOperator) -> &str {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::parser::parse;
-//     use crate::scanner;
-//
-//     #[test]
-//     fn test_parser_with_formatter() {
-//         let input = "3 > 4 + 1 * (1 + 2)";
-//         let tokens = scanner::scan(String::from(input));
-//         let statements = parse(tokens).unwrap();
-//         let ast = print_ast(&expr);
-//         assert_eq!(ast, "(> 3 (- 4 (* 1 (- 1 2))))")
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse;
+    use crate::scanner;
+
+    // #[test]
+    // fn test_parser_with_formatter() {
+    //     let input = "3 > 4 + 1 * (1 + 2)";
+    //     let tokens = scanner::scan(String::from(input));
+    //     let statements = parse(tokens).unwrap();
+    //     let ast = print_ast(&expr);
+    //     assert_eq!(ast, "(> 3 (- 4 (* 1 (- 1 2))))")
+    // }
+
+    #[test]
+    fn test_parser_with_declaration_statement() {
+        let input = "var a = 3;";
+        let tokens = scanner::scan(String::from(input));
+        let statements = parse(tokens).unwrap();
+        assert_eq!(statements.len(), 1);
+        let statement = &statements[0];
+        match statement {
+            Statement::Declaration(
+                Token {
+                    token_type,
+                    lexeme,
+                    literal: _,
+                    line: _,
+                },
+                expr,
+            ) => {
+                assert_eq!(token_type, &TokenType::Identifier);
+                assert_eq!(lexeme, b"a");
+
+                match expr {
+                    Some(Expr::Literal(LiteralValue::Number(num))) => {
+                        assert_eq!(num, &3.0);
+                    }
+                    _ => panic!("Expected literal expression"),
+                }
+            }
+            _ => panic!("Expected declaration statement"),
+        }
+    }
+}
