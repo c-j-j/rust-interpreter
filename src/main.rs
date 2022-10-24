@@ -40,19 +40,21 @@ fn run(buffer: String) {
     match parser::parse(tokens) {
         Ok(statements) => match evaluate(&statements) {
             Ok(_) => {
-                println!("successfully evaluated")
+                println!("✨")
             }
             Err(runtime_err) => println!("runtime error {:?}", runtime_err),
         },
-        Err(parse_error) => {
-            let formatted_lexeme = String::from_utf8(parse_error.token.lexeme.clone()).unwrap();
-            println!(
-                "{:?}: {:?} Line {:} column {:}",
-                parse_error.error_type,
-                formatted_lexeme,
-                parse_error.token.line,
-                parse_error.token.column
-            );
+        Err(parse_errors) => {
+            for parse_error in parse_errors {
+                let formatted_lexeme = String::from_utf8(parse_error.token.lexeme.clone()).unwrap();
+                println!(
+                    "{:?}: {:?} Line {:} column {:}",
+                    parse_error.error_type,
+                    formatted_lexeme,
+                    parse_error.token.line,
+                    parse_error.token.column
+                );
+            }
         }
     }
 }

@@ -63,7 +63,7 @@ pub struct ParseError {
     pub token: Token,
 }
 
-pub fn parse(tokens: Vec<Token>) -> Result<Vec<Statement>, ParseError> {
+pub fn parse(tokens: Vec<Token>) -> Result<Vec<Statement>, Vec<ParseError>> {
     let mut parser = Parser::new(tokens);
 
     parser.parse()
@@ -73,18 +73,25 @@ impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser { tokens, current: 0 }
     }
-    fn parse(&mut self) -> Result<Vec<Statement>, ParseError> {
+    fn parse(&mut self) -> Result<Vec<Statement>, Vec<ParseError>> {
         let mut statements: Vec<Statement> = vec![];
+        let mut errors: Vec<ParseError> = vec![];
 
         while !self.is_at_end() {
             match self.declaration() {
                 Ok(statement) => {
                     statements.push(statement);
                 }
-                Err(err) => return Err(err),
+                Err(err) => {
+                    errors.push(err);
+                }
             }
         }
-        Ok(statements)
+        if errors.is_empty() {
+            Ok(statements)
+        } else {
+            Err(errors)
+        }
     }
 
     fn declaration(&mut self) -> Result<Statement, ParseError> {
@@ -315,6 +322,7 @@ impl Parser {
                 self.advance();
                 return Ok(next_token);
             } else {
+                self.synchronize();
                 return Err(ParseError {
                     error_type: ErrorType::UnexpectedCharacter,
                     token: next_token,
@@ -355,6 +363,26 @@ impl Parser {
 
     fn is_at_end(&self) -> bool {
         return self.peek().map(|t| t.token_type) == Some(TokenType::EOF);
+    }
+
+    fn synchronize(&mut self) {
+        self.advance();
+        while !self.is_at_end() {
+            if self.previous_token().token_type == TokenType::Semicolon {
+                return;
+            }
+            match self.peek().unwrap().token_type {
+                TokenType::Class
+                | TokenType::Fun
+                | TokenType::Var
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => return,
+                _ => self.advance(),
+            }
+        }
     }
 }
 
