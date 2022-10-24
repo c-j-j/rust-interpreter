@@ -45,7 +45,14 @@ fn run(buffer: String) {
             Err(runtime_err) => println!("runtime error {:?}", runtime_err),
         },
         Err(parse_error) => {
-            println!("parse error {:?}", parse_error)
+            let formatted_lexeme = String::from_utf8(parse_error.token.lexeme.clone()).unwrap();
+            println!(
+                "{:?}: {:?} Line {:} column {:}",
+                parse_error.error_type,
+                formatted_lexeme,
+                parse_error.token.line,
+                parse_error.token.column
+            );
         }
     }
 }

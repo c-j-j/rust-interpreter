@@ -46,7 +46,7 @@ pub enum LiteralValue {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-enum ErrorType {
+pub enum ErrorType {
     InvalidBinaryOperator,
     InvalidUnaryOperator,
     UnexpectedCharacter,
@@ -57,10 +57,10 @@ struct Parser {
     current: usize,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ParseError {
-    error_type: ErrorType,
-    failed_token_type: TokenType,
+    pub error_type: ErrorType,
+    pub token: Token,
 }
 
 pub fn parse(tokens: Vec<Token>) -> Result<Vec<Statement>, ParseError> {
@@ -152,8 +152,8 @@ impl Parser {
             Ok(left) => {
                 let mut expr = left;
                 while self.match_token(&[TokenType::BangEqual, TokenType::EqualEqual]) {
-                    let operator = self.previous_token_type();
-                    match parse_binary_operator(operator) {
+                    let operator_token = self.previous_token();
+                    match parse_binary_operator(operator_token) {
                         Ok(binary_op) => match self.comparison() {
                             Ok(right) => {
                                 expr = Expr::Binary(Box::new(expr), Box::new(right), binary_op);
@@ -179,7 +179,7 @@ impl Parser {
                     TokenType::Less,
                     TokenType::LessEqual,
                 ]) {
-                    let operator = self.previous_token_type();
+                    let operator = self.previous_token();
                     match parse_binary_operator(operator) {
                         Ok(binary_op) => {
                             match self.term() {
@@ -203,7 +203,7 @@ impl Parser {
             Ok(left) => {
                 let mut expr = left;
                 while self.match_token(&[TokenType::Minus, TokenType::Plus]) {
-                    let operator = self.previous_token_type();
+                    let operator = self.previous_token();
                     match parse_binary_operator(operator) {
                         Ok(binary_op) => {
                             match self.factor() {
@@ -227,7 +227,7 @@ impl Parser {
             Ok(left) => {
                 let mut expr = left;
                 while self.match_token(&[TokenType::Slash, TokenType::Star]) {
-                    let operator = self.previous_token_type();
+                    let operator = self.previous_token();
                     match parse_binary_operator(operator) {
                         Ok(binary_op) => {
                             match self.unary() {
@@ -248,9 +248,9 @@ impl Parser {
 
     fn unary(&mut self) -> Result<Expr, ParseError> {
         if self.match_token(&[TokenType::Bang, TokenType::Minus]) {
-            let operator = self.previous_token_type();
+            let operator_token = self.previous_token().clone();
             return match self.unary() {
-                Ok(expr) => match parse_unary_operator(operator) {
+                Ok(expr) => match parse_unary_operator(&operator_token) {
                     Ok(unary_op) => Ok(Expr::Unary(Box::new(expr), unary_op)),
                     Err(err) => Err(err),
                 },
@@ -291,10 +291,10 @@ impl Parser {
             return expr;
         }
 
-        let last = self.peek();
+        let last = self.peek().expect("No token found");
         Err(ParseError {
             error_type: ErrorType::UnexpectedCharacter,
-            failed_token_type: last.map(|t| t.token_type).unwrap_or(TokenType::EOF),
+            token: last.clone(),
         })
     }
 
@@ -310,21 +310,27 @@ impl Parser {
 
     fn consume(&mut self, token_type: TokenType) -> Result<Token, ParseError> {
         if let Some(next) = self.peek() {
+            let next_token = next.clone();
             if next.token_type == token_type {
-                let token = next.clone();
                 self.advance();
-                return Ok(token);
+                return Ok(next_token);
             } else {
                 return Err(ParseError {
                     error_type: ErrorType::UnexpectedCharacter,
-                    failed_token_type: token_type,
+                    token: next_token,
                 });
             }
         }
 
         return Err(ParseError {
             error_type: ErrorType::UnexpectedCharacter,
-            failed_token_type: TokenType::EOF,
+            token: Token {
+                token_type: TokenType::EOF,
+                lexeme: [].to_vec(),
+                line: 0,
+                literal: None,
+                column: 0,
+            },
         });
     }
 
@@ -347,17 +353,13 @@ impl Parser {
         self.tokens.get(self.current - 1).unwrap()
     }
 
-    fn previous_token_type(&self) -> TokenType {
-        self.previous_token().token_type
-    }
-
     fn is_at_end(&self) -> bool {
         return self.peek().map(|t| t.token_type) == Some(TokenType::EOF);
     }
 }
 
-fn parse_binary_operator(token_type: TokenType) -> Result<BinaryOperator, ParseError> {
-    match token_type {
+fn parse_binary_operator(token: &Token) -> Result<BinaryOperator, ParseError> {
+    match token.token_type {
         TokenType::Minus => Ok(BinaryOperator::Minus),
         TokenType::Plus => Ok(BinaryOperator::Plus),
         TokenType::Slash => Ok(BinaryOperator::Slash),
@@ -372,18 +374,18 @@ fn parse_binary_operator(token_type: TokenType) -> Result<BinaryOperator, ParseE
         TokenType::Or => Ok(BinaryOperator::Or),
         _ => Err(ParseError {
             error_type: ErrorType::InvalidBinaryOperator,
-            failed_token_type: token_type,
+            token: token.clone(),
         }),
     }
 }
 
-fn parse_unary_operator(token_type: TokenType) -> Result<UnaryOperator, ParseError> {
-    match token_type {
+fn parse_unary_operator(token: &Token) -> Result<UnaryOperator, ParseError> {
+    match token.token_type {
         TokenType::Minus => Ok(UnaryOperator::Minus),
         TokenType::Bang => Ok(UnaryOperator::Bang),
         _ => Err(ParseError {
             error_type: ErrorType::InvalidUnaryOperator,
-            failed_token_type: token_type,
+            token: token.clone(),
         }),
     }
 }
@@ -467,6 +469,7 @@ mod tests {
                     lexeme,
                     literal: _,
                     line: _,
+                    column: _,
                 },
                 expr,
             ) => {

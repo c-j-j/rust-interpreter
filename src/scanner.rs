@@ -72,6 +72,7 @@ pub struct Token {
     pub lexeme: Vec<u8>,
     pub line: u16,
     pub literal: Option<Literal>,
+    pub column: usize,
 }
 
 pub fn scan(input: String) -> Vec<Token> {
@@ -258,6 +259,7 @@ impl Scanner {
             literal,
             token_type: token,
             line: self.line,
+            column: self.start,
         });
     }
 }

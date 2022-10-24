@@ -138,12 +138,12 @@ impl Interpreter {
 
                 return match expr {
                     None => {
-                        &self.env.define(name, Value::Nil);
+                        self.env.define(name, Value::Nil);
                         Ok(())
                     }
                     Some(expr) => match self.evaluate_expression(expr) {
                         Ok(value) => {
-                            &self.env.define(name, value);
+                            self.env.define(name, value);
                             Ok(())
                         }
                         Err(runtmime_error) => Err(runtmime_error),
