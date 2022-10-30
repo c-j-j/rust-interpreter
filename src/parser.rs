@@ -104,29 +104,24 @@ impl Parser {
         if self.match_token(&[TokenType::Var]) {
             return self.declaration_statement();
         }
-        return self.statement();
+        self.statement()
     }
 
     fn declaration_statement(&mut self) -> Result<Statement, ParseError> {
-        match self.consume(TokenType::Identifier) {
-            Ok(token) => {
-                let mut initialiser: Option<Expr> = None;
-                if self.match_token(&[TokenType::Equal]) {
-                    match self.expression() {
-                        Ok(expr) => {
-                            initialiser = Some(expr);
-                        }
-                        Err(err) => return Err(err),
+        self.consume(TokenType::Identifier).and_then(|token| {
+            let mut initialiser: Option<Expr> = None;
+            if self.match_token(&[TokenType::Equal]) {
+                match self.expression() {
+                    Ok(expr) => {
+                        initialiser = Some(expr);
                     }
-                }
-
-                match self.consume(TokenType::Semicolon) {
-                    Ok(_) => return Ok(Statement::Declaration(token, initialiser)),
-                    Err(parse_error) => Err(parse_error),
+                    Err(err) => return Err(err),
                 }
             }
-            Err(err) => Err(err),
-        }
+
+            self.consume(TokenType::Semicolon)
+                .map(|_| Statement::Declaration(token, initialiser))
+        })
     }
 
     fn statement(&mut self) -> Result<Statement, ParseError> {
