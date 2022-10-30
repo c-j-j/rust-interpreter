@@ -2,7 +2,7 @@ mod interpreter;
 mod parser;
 mod scanner;
 
-use crate::interpreter::evaluate;
+use crate::interpreter::Interpreter;
 use std::io::Write;
 use std::{env, io};
 
@@ -20,10 +20,14 @@ fn main() {
 fn run_file(filepath: &String) {
     let contents =
         std::fs::read_to_string(filepath).expect("Something went wrong reading the file");
-    run(contents);
+    let mut interpretter = Interpreter::new();
+
+    run(contents, &mut interpretter);
 }
 
 fn repl() {
+    let mut interpretter = Interpreter::new();
+
     loop {
         print!("> ");
         io::stdout().flush().unwrap();
@@ -31,18 +35,19 @@ fn repl() {
         io::stdin()
             .read_line(&mut buffer)
             .expect("Failed to read line");
-        run(buffer)
+        run(buffer, &mut interpretter)
     }
 }
 
-fn run(buffer: String) {
+fn run(buffer: String, interpretter: &mut Interpreter) {
     let tokens = scanner::scan(buffer);
+
     match parser::parse(tokens) {
-        Ok(statements) => match evaluate(&statements) {
-            Ok(_) => {
-                println!("✨")
-            }
+        Ok(statements) => match interpretter.evaluate(&statements) {
             Err(runtime_err) => println!("runtime error {:?}", runtime_err),
+            _ => {
+                println!()
+            }
         },
         Err(parse_errors) => {
             for parse_error in parse_errors {

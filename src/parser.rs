@@ -6,6 +6,7 @@ pub enum Expr {
     Unary(Box<Expr>, UnaryOperator),
     Literal(LiteralValue),
     Variable(Token),
+    Assignment(String, Box<Expr>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -50,6 +51,7 @@ pub enum ErrorType {
     InvalidBinaryOperator,
     InvalidUnaryOperator,
     UnexpectedCharacter,
+    InvalidAssignmentTarget,
 }
 
 struct Parser {
@@ -151,7 +153,32 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<Expr, ParseError> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Expr, ParseError> {
+        return match self.equality() {
+            Ok(equality_expr) => {
+                if self.match_token(&[TokenType::Equal]) {
+                    let equals = self.previous_token().clone();
+                    return match self.assignment() {
+                        Ok(assignment_expr) => match equality_expr {
+                            Expr::Variable(var_token) => {
+                                let name = String::from_utf8(var_token.lexeme.clone()).unwrap();
+                                Ok(Expr::Assignment(name, Box::new(assignment_expr)))
+                            }
+                            _ => Err(ParseError {
+                                error_type: ErrorType::InvalidAssignmentTarget,
+                                token: equals.clone(),
+                            }),
+                        },
+                        Err(assignment_err) => Err(assignment_err),
+                    };
+                }
+                Ok(equality_expr)
+            }
+            Err(error) => Err(error),
+        };
     }
 
     fn equality(&mut self) -> Result<Expr, ParseError> {
@@ -441,6 +468,7 @@ fn print_ast(expr: &Expr) -> String {
         Expr::Variable(v) => {
             return String::from_utf8(v.lexeme.clone()).unwrap();
         }
+        Expr::Assignment(name, value) => return format!("{} = {}", name, print_ast(value)),
     }
 }
 

@@ -5,6 +5,7 @@ use crate::parser::{BinaryOperator, Expr, LiteralValue, Statement};
 #[derive(PartialEq, Debug)]
 pub enum RuntimeError {
     Runtime,
+    UndefinedVariable(String),
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -15,17 +16,12 @@ pub enum Value {
     Nil,
 }
 
-pub fn evaluate(statements: &Vec<Statement>) -> Result<(), RuntimeError> {
-    let mut interpretter = Interpreter::new();
-    interpretter.evaluate(statements)
-}
-
 struct Environment {
     bindings: HashMap<String, Value>,
 }
 
 impl Environment {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let hashmap = HashMap::new();
         Environment { bindings: hashmap }
     }
@@ -37,14 +33,23 @@ impl Environment {
     fn get(&self, name: String) -> Option<&Value> {
         self.bindings.get(name.as_str())
     }
+
+    fn assign(&mut self, name: String, value: Value) -> Result<(), RuntimeError> {
+        if self.bindings.contains_key(&name) {
+            self.bindings.insert(name.clone(), value);
+            Ok(())
+        } else {
+            Err(RuntimeError::UndefinedVariable(name))
+        }
+    }
 }
 
-struct Interpreter {
+pub struct Interpreter {
     env: Environment,
 }
 
 impl Interpreter {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let env = Environment::new();
         Interpreter { env }
     }
@@ -60,7 +65,7 @@ impl Interpreter {
     }
 
     fn evaluate_binary_op(
-        &self,
+        &mut self,
         left: &Expr,
         right: &Expr,
         op: &BinaryOperator,
@@ -91,7 +96,7 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_expression(&self, expr: &Expr) -> Result<Value, RuntimeError> {
+    fn evaluate_expression(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         match expr {
             Expr::Binary(left, right, op) => self.evaluate_binary_op(left, right, op),
             Expr::Unary(_expr, _op) => {
@@ -113,6 +118,15 @@ impl Interpreter {
                     }
                 };
             }
+            Expr::Assignment(name, expr) => match self.evaluate_expression(expr) {
+                Ok(value) => self
+                    .env
+                    .assign(String::from(name), value)
+                    .map(|_| Value::Nil),
+                Err(err) => {
+                    return Err(err);
+                }
+            },
         }
     }
 
@@ -135,6 +149,8 @@ impl Interpreter {
             },
             Statement::Declaration(name, expr) => {
                 let name = String::from_utf8(name.lexeme.clone()).unwrap();
+
+                println!("Declaring {:?}", name);
 
                 return match expr {
                     None => {
@@ -171,11 +187,14 @@ mod tests {
     use crate::scanner;
 
     #[test]
-    fn test_interpreter() {
-        let input = "var a = 4 + 5 + 6;";
+    fn test_interpreter_assignment() {
+        let input = "
+        var a = 4;
+        print a;";
         let tokens = scanner::scan(String::from(input));
         let statements = parse(tokens).unwrap();
-        let result = evaluate(&statements);
+        let mut interpreter = Interpreter::new();
+        let result = interpreter.evaluate(&statements);
         assert_eq!(result, Ok(()));
     }
 }
