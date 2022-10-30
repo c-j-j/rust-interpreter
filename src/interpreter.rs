@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-
+use crate::environment::Environment;
 use crate::parser::{BinaryOperator, Expr, LiteralValue, Statement};
 
 #[derive(PartialEq, Debug)]
@@ -16,39 +15,11 @@ pub enum Value {
     Nil,
 }
 
-struct Environment {
-    bindings: HashMap<String, Value>,
+pub struct Interpreter<'a> {
+    env: Environment<'a>,
 }
 
-impl Environment {
-    pub fn new() -> Self {
-        let hashmap = HashMap::new();
-        Environment { bindings: hashmap }
-    }
-
-    fn define(&mut self, name: String, value: Value) {
-        self.bindings.insert(name, value);
-    }
-
-    fn get(&self, name: String) -> Option<&Value> {
-        self.bindings.get(name.as_str())
-    }
-
-    fn assign(&mut self, name: String, value: Value) -> Result<(), RuntimeError> {
-        if self.bindings.contains_key(&name) {
-            self.bindings.insert(name.clone(), value);
-            Ok(())
-        } else {
-            Err(RuntimeError::UndefinedVariable(name))
-        }
-    }
-}
-
-pub struct Interpreter {
-    env: Environment,
-}
-
-impl Interpreter {
+impl<'a> Interpreter<'a> {
     pub fn new() -> Self {
         let env = Environment::new();
         Interpreter { env }
