@@ -71,6 +71,10 @@ pub fn parse(tokens: Vec<Token>) -> Result<Vec<Statement>, Vec<ParseError>> {
     parser.parse()
 }
 
+fn lexeme_to_name(var_token: &Token) -> String {
+    String::from_utf8(var_token.lexeme.clone()).unwrap()
+}
+
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser { tokens, current: 0 }
@@ -133,23 +137,17 @@ impl Parser {
     }
 
     fn print_statement(&mut self) -> Result<Statement, ParseError> {
-        return match self.expression() {
-            Ok(expr) => match self.consume(TokenType::Semicolon) {
-                Ok(_) => Ok(Statement::Print(expr)),
-                Err(err) => Err(err),
-            },
-            Err(err) => Err(err),
-        };
+        self.expression().and_then(|expr| {
+            self.consume(TokenType::Semicolon)
+                .map(|_| Statement::Print(expr))
+        })
     }
 
     fn expr_statement(&mut self) -> Result<Statement, ParseError> {
-        return match self.expression() {
-            Ok(expr) => match self.consume(TokenType::Semicolon) {
-                Ok(_) => Ok(Statement::Expression(expr)),
-                Err(err) => Err(err),
-            },
-            Err(err) => Err(err),
-        };
+        self.expression().and_then(|expr| {
+            self.consume(TokenType::Semicolon)
+                .map(|_| Statement::Expression(expr))
+        })
     }
 
     fn expression(&mut self) -> Result<Expr, ParseError> {
@@ -164,7 +162,7 @@ impl Parser {
                     return match self.assignment() {
                         Ok(assignment_expr) => match equality_expr {
                             Expr::Variable(var_token) => {
-                                let name = String::from_utf8(var_token.lexeme.clone()).unwrap();
+                                let name = lexeme_to_name(&var_token);
                                 Ok(Expr::Assignment(name, Box::new(assignment_expr)))
                             }
                             _ => Err(ParseError {
@@ -446,16 +444,16 @@ fn parse_unary_operator(token: &Token) -> Result<UnaryOperator, ParseError> {
 }
 
 #[allow(dead_code)]
-fn print_ast(expr: &Expr) -> String {
+fn print_ast_expr(expr: &Expr) -> String {
     match expr {
         Expr::Binary(left, right, op) => {
-            let l = print_ast(left);
-            let r = print_ast(right);
+            let l = print_ast_expr(left);
+            let r = print_ast_expr(right);
             let oper = print_binary_op(op);
             return format!("({} {} {})", oper, l, r);
         }
         Expr::Unary(expr, op) => {
-            let l = print_ast(expr);
+            let l = print_ast_expr(expr);
             let oper = print_unary_op(op);
             return format!("{}{}", oper, l);
         }
@@ -468,7 +466,23 @@ fn print_ast(expr: &Expr) -> String {
         Expr::Variable(v) => {
             return String::from_utf8(v.lexeme.clone()).unwrap();
         }
-        Expr::Assignment(name, value) => return format!("{} = {}", name, print_ast(value)),
+        Expr::Assignment(name, value) => return format!("{} = {}", name, print_ast_expr(value)),
+    }
+}
+
+#[allow(dead_code)]
+fn print_ast(statement: &Statement) -> String {
+    match statement {
+        Statement::Expression(expr) => print_ast_expr(expr),
+        Statement::Print(expr) => format!("print {}", print_ast_expr(expr)),
+        Statement::Declaration(name, expr) => match expr {
+            None => {
+                format!("var {};", lexeme_to_name(name))
+            }
+            Some(value) => {
+                format!("var {} = {}", lexeme_to_name(name), print_ast_expr(value))
+            }
+        },
     }
 }
 
@@ -502,14 +516,23 @@ mod tests {
     use crate::parser::parse;
     use crate::scanner;
 
-    // #[test]
-    // fn test_parser_with_formatter() {
-    //     let input = "3 > 4 + 1 * (1 + 2)";
-    //     let tokens = scanner::scan(String::from(input));
-    //     let statements = parse(tokens).unwrap();
-    //     let ast = print_ast(&expr);
-    //     assert_eq!(ast, "(> 3 (- 4 (* 1 (- 1 2))))")
-    // }
+    #[test]
+    fn test_declaration() {
+        let input = "var a = 3;";
+        let tokens = scanner::scan(String::from(input));
+        let statements = parse(tokens).unwrap();
+        let statement = statements.first().unwrap();
+        assert_eq!(print_ast(statement), "var a = 3");
+    }
+
+    #[test]
+    fn test_assignment() {
+        let input = "a = 3;";
+        let tokens = scanner::scan(String::from(input));
+        let statements = parse(tokens).unwrap();
+        let statement = statements.first().unwrap();
+        assert_eq!(print_ast(statement), "a = 3");
+    }
 
     #[test]
     fn test_parser_with_declaration_statement() {
