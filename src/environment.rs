@@ -38,7 +38,11 @@ impl<'a> Environment<'a> {
             self.bindings.insert(name.clone(), value);
             Ok(())
         } else {
-            Err(RuntimeError::UndefinedVariable(name))
+            let enclosing = &self.enclosing;
+            match enclosing {
+                Some(env) => env.assign(name, value), // TODO carry on from here, how do we get the enclosing env and mutate?
+                None => Err(RuntimeError::UndefinedVariable(name)),
+            }
         }
     }
 }
