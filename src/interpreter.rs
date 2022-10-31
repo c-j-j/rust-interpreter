@@ -15,11 +15,11 @@ pub enum Value {
     Nil,
 }
 
-pub struct Interpreter<'a> {
-    env: Environment<'a>,
+pub struct Interpreter {
+    env: Environment,
 }
 
-impl<'a> Interpreter<'a> {
+impl Interpreter {
     pub fn new() -> Self {
         let env = Environment::new();
         Interpreter { env }

@@ -1,12 +1,12 @@
 use crate::interpreter::{RuntimeError, Value};
 use std::collections::HashMap;
 
-pub struct Environment<'a> {
+pub struct Environment {
     bindings: HashMap<String, Value>,
-    enclosing: Option<Box<&'a Environment<'a>>>,
+    enclosing: Option<Box<Environment>>,
 }
 
-impl<'a> Environment<'a> {
+impl Environment {
     pub fn new() -> Self {
         let bindings = HashMap::new();
         Environment {
@@ -15,7 +15,7 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn new_with_enclosing(enclosing: &'a Environment<'_>) -> Self {
+    pub fn new_with_enclosing(enclosing: Environment) -> Self {
         let bindings = HashMap::new();
         Environment {
             bindings,
@@ -38,10 +38,9 @@ impl<'a> Environment<'a> {
             self.bindings.insert(name.clone(), value);
             Ok(())
         } else {
-            let enclosing = &self.enclosing;
-            match enclosing {
-                Some(env) => env.assign(name, value), // TODO carry on from here, how do we get the enclosing env and mutate?
+            match self.enclosing.as_mut() {
                 None => Err(RuntimeError::UndefinedVariable(name)),
+                Some(env) => env.assign(name, value),
             }
         }
     }
@@ -69,7 +68,7 @@ mod tests {
     fn test_get_enclosing() {
         let mut env = Environment::new();
         env.define(String::from("a"), Value::Number(1.0));
-        let mut env2 = Environment::new_with_enclosing(&env);
+        let mut env2 = Environment::new_with_enclosing(env);
         assert_eq!(env2.get(String::from("a")), Some(&Value::Number(1.0)));
     }
 
@@ -85,7 +84,7 @@ mod tests {
     fn test_assign_enclosing() {
         let mut env = Environment::new();
         env.define(String::from("a"), Value::Number(1.0));
-        let mut env2 = Environment::new_with_enclosing(&env);
+        let mut env2 = Environment::new_with_enclosing(env);
         env2.assign(String::from("a"), Value::Number(2.0)).unwrap();
         assert_eq!(env2.get(String::from("a")), Some(&Value::Number(2.0)));
     }
@@ -94,7 +93,7 @@ mod tests {
     fn test_assign_enclosing_undefined() {
         let mut env = Environment::new();
         env.define(String::from("a"), Value::Number(1.0));
-        let mut env2 = Environment::new_with_enclosing(&env);
+        let mut env2 = Environment::new_with_enclosing(env);
         env2.define(String::from("b"), Value::Number(2.0));
         assert_eq!(env2.get(String::from("b")), Some(&Value::Number(2.0)));
         assert_eq!(env2.get(String::from("a")), Some(&Value::Number(1.0)));
