@@ -133,23 +133,27 @@ impl Interpreter {
                             self.env.define(name, value);
                             Ok(())
                         }
-                        Err(runtmime_error) => Err(runtmime_error),
+                        Err(runtime_error) => Err(runtime_error),
                     },
+                };
+            }
+            Statement::Block(statements) => {
+                let env = Environment::new_with_enclosing(self.env.clone());
+                self.env = env;
+                match self.evaluate(statements) {
+                    Ok(result) => {
+                        self.env = *self.env.enclosing.clone().unwrap();
+                        return Ok(result);
+                    }
+                    Err(err) => {
+                        return Err(err);
+                    }
                 };
             }
         }
         Ok(())
     }
 }
-
-// #[test]
-// fn test_parser_with_expr_evaluator() {
-//     let input = "4 + 5 + 6";
-//     let tokens = scanner::scan(String::from(input));
-//     let expr = parse(tokens).unwrap();
-//     let result = evaluate_expression(&expr);
-//     assert_eq!(result, Ok(Value::Number(15.)));
-// }
 
 #[cfg(test)]
 mod tests {
@@ -161,6 +165,22 @@ mod tests {
     fn test_interpreter_assignment() {
         let input = "
         var a = 4;
+        print a;";
+        let tokens = scanner::scan(String::from(input));
+        let statements = parse(tokens).unwrap();
+        let mut interpreter = Interpreter::new();
+        let result = interpreter.evaluate(&statements);
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn test_blocks() {
+        let input = "
+        var a = 4;
+        {
+            var a = 5;
+            print a;
+        }
         print a;";
         let tokens = scanner::scan(String::from(input));
         let statements = parse(tokens).unwrap();

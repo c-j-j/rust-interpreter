@@ -1,9 +1,10 @@
 use crate::interpreter::{RuntimeError, Value};
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct Environment {
     bindings: HashMap<String, Value>,
-    enclosing: Option<Box<Environment>>,
+    pub enclosing: Option<Box<Environment>>,
 }
 
 impl Environment {

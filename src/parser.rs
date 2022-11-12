@@ -14,6 +14,7 @@ pub enum Statement {
     Expression(Expr),
     Print(Expr),
     Declaration(Token, Option<Expr>),
+    Block(Vec<Statement>),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -128,7 +129,30 @@ impl Parser {
         if self.match_token(&[TokenType::Print]) {
             return self.print_statement();
         }
+        if self.match_token(&[TokenType::LeftBrace]) {
+            return self.block_statement();
+        }
         return self.expr_statement();
+    }
+
+    fn block_statement(&mut self) -> Result<Statement, ParseError> {
+        let mut statements: Vec<Statement> = vec![];
+
+        while !self.match_token(&[TokenType::RightBrace]) && !self.is_at_end() {
+            match self.declaration() {
+                Ok(next_declaration) => {
+                    statements.push(next_declaration);
+                }
+                Err(err) => return Err(err),
+            }
+        }
+
+        // there is a bug that is causing the following to fail - seems that the token has already been consumed
+        // if let Err(err) = self.consume(TokenType::RightBrace) {
+        //     return Err(err);
+        // }
+
+        Ok(Statement::Block(statements))
     }
 
     fn print_statement(&mut self) -> Result<Statement, ParseError> {
@@ -382,15 +406,17 @@ impl Parser {
     }
 
     fn is_at_end(&self) -> bool {
-        return self.peek().map(|t| t.token_type) == Some(TokenType::EOF);
+        self.peek().map(|t| t.token_type) == Some(TokenType::EOF)
     }
 
     fn synchronize(&mut self) {
         self.advance();
+
         while !self.is_at_end() {
             if self.previous_token().token_type == TokenType::Semicolon {
                 return;
             }
+
             match self.peek().unwrap().token_type {
                 TokenType::Class
                 | TokenType::Fun
@@ -478,6 +504,15 @@ fn print_ast(statement: &Statement) -> String {
                 format!("var {} = {}", lexeme_to_name(name), print_ast_expr(value))
             }
         },
+        Statement::Block(statements) => {
+            let mut result = String::from("{");
+            for statement in statements {
+                result.push_str(&print_ast(statement));
+                result.push_str(";");
+            }
+            result.push_str("}");
+            result
+        }
     }
 }
 
@@ -527,6 +562,16 @@ mod tests {
         let statements = parse(tokens).unwrap();
         let statement = statements.first().unwrap();
         assert_eq!(print_ast(statement), "a = 3");
+    }
+
+    #[test]
+    fn test_blocks() {
+        let input = "{ var a = 3; print a; }";
+        let tokens = scanner::scan(String::from(input));
+
+        let statements = parse(tokens).unwrap();
+        let statement = statements.first().unwrap();
+        assert_eq!(print_ast(statement), "{var a = 3;print a;}");
     }
 
     #[test]
