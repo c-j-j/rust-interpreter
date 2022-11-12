@@ -138,7 +138,7 @@ impl Parser {
     fn block_statement(&mut self) -> Result<Statement, ParseError> {
         let mut statements: Vec<Statement> = vec![];
 
-        while !self.match_token(&[TokenType::RightBrace]) && !self.is_at_end() {
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
             match self.declaration() {
                 Ok(next_declaration) => {
                     statements.push(next_declaration);
@@ -148,9 +148,9 @@ impl Parser {
         }
 
         // there is a bug that is causing the following to fail - seems that the token has already been consumed
-        // if let Err(err) = self.consume(TokenType::RightBrace) {
-        //     return Err(err);
-        // }
+        if let Err(err) = self.consume(TokenType::RightBrace) {
+            return Err(err);
+        }
 
         Ok(Statement::Block(statements))
     }
