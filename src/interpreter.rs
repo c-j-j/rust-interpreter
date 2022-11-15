@@ -63,6 +63,21 @@ impl Interpreter {
             (Value::Bool(a), BinaryOperator::Or, Value::Bool(b)) => {
                 return Ok(Value::Bool(a || b));
             }
+            (Value::Number(a), BinaryOperator::Greater, Value::Number(b)) => {
+                return Ok(Value::Bool(a > b))
+            }
+            (Value::Number(a), BinaryOperator::GreaterEqual, Value::Number(b)) => {
+                return Ok(Value::Bool(a >= b))
+            }
+            (Value::Number(a), BinaryOperator::Less, Value::Number(b)) => {
+                return Ok(Value::Bool(a < b))
+            }
+            (Value::Number(a), BinaryOperator::LessEqual, Value::Number(b)) => {
+                return Ok(Value::Bool(a <= b))
+            }
+            (Value::Number(a), BinaryOperator::EqualEqual, Value::Number(b)) => {
+                return Ok(Value::Bool(a == b))
+            }
             _ => Err(RuntimeError::Runtime),
         }
     }
@@ -150,6 +165,19 @@ impl Interpreter {
                     }
                 };
             }
+            Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let condition = self.evaluate_expression(condition)?;
+
+                if let Value::Bool(true) = condition {
+                    return self.evaluate_statement(then_branch);
+                } else if let Some(else_branch) = else_branch {
+                    return self.evaluate_statement(else_branch);
+                }
+            }
         }
         Ok(())
     }
@@ -182,6 +210,21 @@ mod tests {
             print a;
         }
         print a;";
+        let tokens = scanner::scan(String::from(input));
+        let statements = parse(tokens).unwrap();
+        let mut interpreter = Interpreter::new();
+        let result = interpreter.evaluate(&statements);
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn test_if() {
+        let input = "
+        var a = 4;
+        if (a == 4) {
+            print a;
+        }
+        ";
         let tokens = scanner::scan(String::from(input));
         let statements = parse(tokens).unwrap();
         let mut interpreter = Interpreter::new();

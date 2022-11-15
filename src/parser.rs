@@ -15,6 +15,11 @@ pub enum Statement {
     Print(Expr),
     Declaration(Token, Option<Expr>),
     Block(Vec<Statement>),
+    If {
+        condition: Expr,
+        then_branch: Box<Statement>,
+        else_branch: Option<Box<Statement>>,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -126,6 +131,9 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Statement, ParseError> {
+        if self.match_token(&[TokenType::If]) {
+            return self.if_statement();
+        }
         if self.match_token(&[TokenType::Print]) {
             return self.print_statement();
         }
@@ -133,6 +141,29 @@ impl Parser {
             return self.block_statement();
         }
         return self.expr_statement();
+    }
+
+    fn if_statement(&mut self) -> Result<Statement, ParseError> {
+        self.consume(TokenType::LeftParen)
+            .and_then(|_| self.expression())
+            .and_then(|condition| match self.consume(TokenType::RightParen) {
+                Ok(_) => {
+                    let then_branch = self.statement();
+                    if then_branch.is_err() {
+                        return Err(then_branch.err().unwrap());
+                    }
+                    let mut else_branch: Option<Statement> = None;
+                    if self.match_token(&[TokenType::Else]) {
+                        else_branch = Some(self.statement()?);
+                    }
+                    Ok(Statement::If {
+                        condition,
+                        then_branch: Box::new(then_branch?),
+                        else_branch: else_branch.map(Box::new),
+                    })
+                }
+                Err(err) => return Err(err),
+            })
     }
 
     fn block_statement(&mut self) -> Result<Statement, ParseError> {
@@ -511,6 +542,21 @@ fn print_ast(statement: &Statement) -> String {
                 result.push_str(";");
             }
             result.push_str("}");
+            result
+        }
+        Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let mut result = String::from("if (");
+            result.push_str(&print_ast_expr(condition));
+            result.push_str(") ");
+            result.push_str(&print_ast(then_branch));
+            if let Some(else_branch) = else_branch {
+                result.push_str(" else ");
+                result.push_str(&print_ast(else_branch));
+            }
             result
         }
     }
