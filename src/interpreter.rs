@@ -11,7 +11,6 @@ pub enum RuntimeError {
 #[derive(PartialEq, Debug, Clone)]
 pub struct NativeFunction {
     pub name: String,
-    pub arity: i32,
     pub callable: fn() -> Result<Value, RuntimeError>,
 }
 
@@ -34,7 +33,6 @@ impl Interpreter {
         env.define(
             String::from("clock"),
             Value::NativeFunction(NativeFunction {
-                arity: 0,
                 name: String::from("clock"),
                 callable: || {
                     Ok(Value::Number(
