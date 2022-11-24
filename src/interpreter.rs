@@ -4,7 +4,15 @@ use crate::parser::{BinaryOperator, Expr, LiteralValue, Statement};
 #[derive(PartialEq, Debug)]
 pub enum RuntimeError {
     Runtime,
+    InvalidFunction,
     UndefinedVariable(String),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct NativeFunction {
+    pub name: String,
+    pub arity: i32,
+    pub callable: fn() -> Result<Value, RuntimeError>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -13,6 +21,7 @@ pub enum Value {
     String(String),
     Bool(bool),
     Nil,
+    NativeFunction(NativeFunction),
 }
 
 pub struct Interpreter {
@@ -21,7 +30,22 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
-        let env = Environment::new();
+        let mut env = Environment::new();
+        env.define(
+            String::from("clock"),
+            Value::NativeFunction(NativeFunction {
+                arity: 0,
+                name: String::from("clock"),
+                callable: || {
+                    Ok(Value::Number(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis() as f64,
+                    ))
+                },
+            }),
+        );
         Interpreter { env }
     }
 
@@ -113,6 +137,20 @@ impl Interpreter {
                     return Err(err);
                 }
             },
+            Expr::Call(expr, args) => {
+                let callee = self.evaluate_expression(expr)?;
+
+                let mut arguments = Vec::new();
+                for arg in args {
+                    let value = self.evaluate_expression(arg)?;
+                    arguments.push(value);
+                }
+
+                match callee {
+                    Value::NativeFunction(fun) => (fun.callable)(),
+                    _ => return Err(RuntimeError::InvalidFunction),
+                }
+            }
         }
     }
 
@@ -130,6 +168,9 @@ impl Interpreter {
                     Value::String(str) => println!("{}", str),
                     Value::Bool(bool) => println!("{}", bool),
                     Value::Nil => println!("nil"),
+                    Value::NativeFunction(native_function) => {
+                        println!("Function: {}", native_function.name)
+                    }
                 },
                 Err(err) => return Err(err),
             },

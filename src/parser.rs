@@ -7,6 +7,7 @@ pub enum Expr {
     Literal(LiteralValue),
     Variable(Token),
     Assignment(String, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -339,7 +340,34 @@ impl Parser {
                 Err(err) => Err(err),
             };
         }
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.primary()?;
+        loop {
+            if self.match_token(&[TokenType::LeftParen]) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, expr: Expr) -> Result<Expr, ParseError> {
+        let mut arguments = Vec::new();
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                arguments.push(self.expression()?);
+                if !self.match_token(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+        return self
+            .consume(TokenType::RightParen)
+            .and_then(|_| Ok(Expr::Call(Box::new(expr), arguments)));
     }
 
     fn primary(&mut self) -> Result<Expr, ParseError> {
@@ -519,6 +547,14 @@ fn print_ast_expr(expr: &Expr) -> String {
             return String::from_utf8(v.lexeme.clone()).unwrap();
         }
         Expr::Assignment(name, value) => return format!("{} = {}", name, print_ast_expr(value)),
+        Expr::Call(expr, args) => {
+            let mut arg_str = String::new();
+            for arg in args {
+                arg_str.push_str(&print_ast_expr(arg));
+                arg_str.push_str(", ");
+            }
+            return format!("{}({})", print_ast_expr(expr), arg_str);
+        }
     }
 }
 
