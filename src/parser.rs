@@ -1,6 +1,6 @@
 use crate::scanner::{Literal, Token, TokenType};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Binary(Box<Expr>, Box<Expr>, BinaryOperator),
     Unary(Box<Expr>, UnaryOperator),
@@ -10,7 +10,7 @@ pub enum Expr {
     Call(Box<Expr>, Vec<Expr>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Expression(Expr),
     Print(Expr),
@@ -21,9 +21,14 @@ pub enum Statement {
         then_branch: Box<Statement>,
         else_branch: Option<Box<Statement>>,
     },
+    Function {
+        name: Token,
+        params: Vec<Token>,
+        block: Vec<Statement>,
+    },
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum BinaryOperator {
     Minus,
     Plus,
@@ -39,13 +44,13 @@ pub enum BinaryOperator {
     Or,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum UnaryOperator {
     Bang,
     Minus,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
     Number(f64),
     String(String),
@@ -108,10 +113,53 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Result<Statement, ParseError> {
+        if self.match_token(&[TokenType::Fun]) {
+            return self.function_declaration();
+        }
         if self.match_token(&[TokenType::Var]) {
             return self.declaration_statement();
         }
         self.statement()
+    }
+
+    fn function_declaration(&mut self) -> Result<Statement, ParseError> {
+        self.consume(TokenType::Identifier).and_then(|name_token| {
+            self.consume(TokenType::LeftParen).and_then(|_| {
+                let mut params: Vec<Token> = vec![];
+                if !self.check(&TokenType::RightParen) {
+                    loop {
+                        match self.consume(TokenType::Identifier) {
+                            Ok(param) => {
+                                params.push(param);
+                            }
+                            Err(err) => return Err(err),
+                        }
+                        if !self.match_token(&[TokenType::Comma]) {
+                            break;
+                        }
+                    }
+                }
+                self.consume(TokenType::RightParen).and_then(|_| {
+                    self.consume(TokenType::LeftBrace).and_then(|_| {
+                        let mut statements: Vec<Statement> = vec![];
+                        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+                            match self.declaration() {
+                                Ok(statement) => {
+                                    statements.push(statement);
+                                }
+                                Err(err) => return Err(err),
+                            }
+                        }
+                        self.consume(TokenType::RightBrace)
+                            .map(|_| Statement::Function {
+                                name: name_token,
+                                params,
+                                block: statements,
+                            })
+                    })
+                })
+            })
+        })
     }
 
     fn declaration_statement(&mut self) -> Result<Statement, ParseError> {
@@ -571,15 +619,7 @@ fn print_ast(statement: &Statement) -> String {
                 format!("var {} = {}", lexeme_to_name(name), print_ast_expr(value))
             }
         },
-        Statement::Block(statements) => {
-            let mut result = String::from("{");
-            for statement in statements {
-                result.push_str(&print_ast(statement));
-                result.push_str(";");
-            }
-            result.push_str("}");
-            result
-        }
+        Statement::Block(statements) => print_block_ast(statements),
         Statement::If {
             condition,
             then_branch,
@@ -595,7 +635,33 @@ fn print_ast(statement: &Statement) -> String {
             }
             result
         }
+        Statement::Function {
+            name,
+            params,
+            block,
+        } => {
+            let mut result = String::from("fun ");
+            result.push_str(&lexeme_to_name(name));
+            result.push_str("(");
+            for param in params {
+                result.push_str(&lexeme_to_name(param));
+                result.push_str(", ");
+            }
+            result.push_str(") ");
+            result.push_str(&print_block_ast(block));
+            result
+        }
     }
+}
+
+fn print_block_ast(statements: &Vec<Statement>) -> String {
+    let mut result = String::from("{");
+    for statement in statements {
+        result.push_str(&print_ast(statement));
+        result.push_str(";");
+    }
+    result.push_str("}");
+    result
 }
 
 fn print_binary_op(op: &BinaryOperator) -> &str {
@@ -685,6 +751,37 @@ mod tests {
                 }
             }
             _ => panic!("Expected declaration statement"),
+        }
+    }
+
+    #[test]
+    fn test_parser_with_fun_declaration_statement() {
+        let input = "fun a() { print 3; }";
+        let tokens = scanner::scan(String::from(input));
+        let statements = parse(tokens).unwrap();
+        assert_eq!(statements.len(), 1);
+        let statement = &statements[0];
+        match statement {
+            Statement::Function {
+                name,
+                params,
+                block,
+            } => {
+                assert_eq!(name.lexeme, b"a");
+                assert_eq!(params.len(), 0);
+                assert_eq!(block.len(), 1);
+                let print_statement = &block[0];
+                match print_statement {
+                    Statement::Print(expr) => match expr {
+                        Expr::Literal(LiteralValue::Number(num)) => {
+                            assert_eq!(num, &3.0);
+                        }
+                        _ => panic!("Expected literal expression"),
+                    },
+                    _ => panic!("Expected print statement"),
+                }
+            }
+            _ => panic!("Expected function declaration statement"),
         }
     }
 }

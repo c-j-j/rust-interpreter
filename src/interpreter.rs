@@ -1,5 +1,6 @@
 use crate::environment::Environment;
 use crate::parser::{BinaryOperator, Expr, LiteralValue, Statement};
+use crate::scanner::Token;
 use std::fmt::Formatter;
 
 #[derive(PartialEq, Debug)]
@@ -34,6 +35,11 @@ pub enum Value {
     Bool(bool),
     Nil,
     NativeFunction(NativeFunction),
+    Function {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Statement>,
+    },
 }
 
 pub struct Interpreter {
@@ -152,14 +158,28 @@ impl Interpreter {
             Expr::Call(expr, args) => {
                 let callee = self.evaluate_expression(expr)?;
 
-                let mut arguments = Vec::new();
+                let mut evaluated_args = Vec::new();
                 for arg in args {
                     let value = self.evaluate_expression(arg)?;
-                    arguments.push(value);
+                    evaluated_args.push(value);
                 }
 
                 match callee {
-                    Value::NativeFunction(fun) => (fun.callable)(arguments.as_slice()),
+                    Value::NativeFunction(fun) => (fun.callable)(evaluated_args.as_slice()),
+                    Value::Function { name, params, body } => {
+                        let mut env = Environment::new_with_enclosing(self.env.clone());
+                        for (i, arg) in params.iter().enumerate() {
+                            env.define(arg.clone(), evaluated_args[i].clone());
+                        }
+                        let mut interpreter = Interpreter { env };
+                        for statement in body {
+                            match interpreter.evaluate_statement(&statement) {
+                                Ok(_) => {}
+                                Err(err) => return Err(err),
+                            }
+                        }
+                        Ok(Value::Nil)
+                    }
                     _ => return Err(RuntimeError::InvalidFunction),
                 }
             }
@@ -182,6 +202,9 @@ impl Interpreter {
                     Value::Nil => println!("nil"),
                     Value::NativeFunction(native_function) => {
                         println!("Function: {}", native_function.name)
+                    }
+                    Value::Function { name, .. } => {
+                        println!("Function: {}", name)
                     }
                 },
                 Err(err) => return Err(err),
@@ -230,6 +253,22 @@ impl Interpreter {
                 } else if let Some(else_branch) = else_branch {
                     return self.evaluate_statement(else_branch);
                 }
+            }
+            Statement::Function {
+                name,
+                params,
+                block,
+            } => {
+                let name = String::from_utf8(name.lexeme.clone()).unwrap();
+                let function = Value::Function {
+                    name: name.clone(),
+                    params: params
+                        .iter()
+                        .map(|p| String::from_utf8(p.lexeme.clone()).unwrap())
+                        .collect(),
+                    body: block.clone(),
+                };
+                self.env.define(name, function);
             }
         }
         Ok(())
@@ -288,7 +327,7 @@ mod tests {
     #[test]
     fn test_clock() {
         let input = "
-        print clock();
+        clock();
         ";
         let tokens = scanner::scan(String::from(input));
         let statements = parse(tokens).unwrap();
