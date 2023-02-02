@@ -1,5 +1,6 @@
 use crate::environment::Environment;
 use crate::parser::{BinaryOperator, Expr, LiteralValue, Statement};
+use std::fmt::Formatter;
 
 #[derive(PartialEq, Debug)]
 pub enum RuntimeError {
@@ -8,10 +9,22 @@ pub enum RuntimeError {
     UndefinedVariable(String),
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Clone)]
 pub struct NativeFunction {
     pub name: String,
-    pub callable: fn() -> Result<Value, RuntimeError>,
+    pub callable: fn(args: &[Value]) -> Result<Value, RuntimeError>,
+}
+
+impl std::fmt::Debug for NativeFunction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "function {}()", self.name)
+    }
+}
+
+impl PartialEq for NativeFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.eq(&other.name)
+    }
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -34,7 +47,7 @@ impl Interpreter {
             String::from("clock"),
             Value::NativeFunction(NativeFunction {
                 name: String::from("clock"),
-                callable: || {
+                callable: |_| {
                     Ok(Value::Number(
                         std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
@@ -44,6 +57,7 @@ impl Interpreter {
                 },
             }),
         );
+
         Interpreter { env }
     }
 
@@ -145,7 +159,7 @@ impl Interpreter {
                 }
 
                 match callee {
-                    Value::NativeFunction(fun) => (fun.callable)(),
+                    Value::NativeFunction(fun) => (fun.callable)(arguments.as_slice()),
                     _ => return Err(RuntimeError::InvalidFunction),
                 }
             }
@@ -263,6 +277,18 @@ mod tests {
         if (a == 4) {
             print a;
         }
+        ";
+        let tokens = scanner::scan(String::from(input));
+        let statements = parse(tokens).unwrap();
+        let mut interpreter = Interpreter::new();
+        let result = interpreter.evaluate(&statements);
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn test_clock() {
+        let input = "
+        print clock();
         ";
         let tokens = scanner::scan(String::from(input));
         let statements = parse(tokens).unwrap();
