@@ -1,13 +1,11 @@
-fun bar() {
-   print  1;
-}
-
 fun foo(n) {
    if (n < 3) {
-      print 0;
+      return 0;
    } else {
-      print 1;
+      return 1;
    }
 }
 
-foo(3);
+var result = foo(3);
+
+print result;

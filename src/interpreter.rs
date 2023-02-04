@@ -8,6 +8,7 @@ pub enum RuntimeError {
     Runtime,
     InvalidFunction,
     UndefinedVariable(String),
+    Return(Value),
 }
 
 #[derive(Clone)]
@@ -175,7 +176,12 @@ impl Interpreter {
                         for statement in body {
                             match interpreter.evaluate_statement(&statement) {
                                 Ok(_) => {}
-                                Err(err) => return Err(err),
+                                Err(err) => {
+                                    return match err {
+                                        RuntimeError::Return(value) => Ok(value),
+                                        _ => Err(err),
+                                    }
+                                }
                             }
                         }
                         Ok(Value::Nil)
@@ -211,9 +217,6 @@ impl Interpreter {
             },
             Statement::Declaration(name, expr) => {
                 let name = String::from_utf8(name.lexeme.clone()).unwrap();
-
-                println!("Declaring {:?}", name);
-
                 return match expr {
                     None => {
                         self.env.define(name, Value::Nil);
@@ -270,6 +273,15 @@ impl Interpreter {
                 };
                 self.env.define(name, function);
             }
+            Statement::Return(_, return_value) => match return_value {
+                None => {
+                    return Err(RuntimeError::Return(Value::Nil));
+                }
+                Some(expr) => {
+                    let value = self.evaluate_expression(expr)?;
+                    return Err(RuntimeError::Return(value));
+                }
+            },
         }
         Ok(())
     }

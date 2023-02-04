@@ -26,6 +26,7 @@ pub enum Statement {
         params: Vec<Token>,
         block: Vec<Statement>,
     },
+    Return(Token, Option<Expr>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -183,10 +184,28 @@ impl Parser {
         if self.match_token(&[TokenType::Print]) {
             return self.print_statement();
         }
+        if self.match_token(&[TokenType::Return]) {
+            return self.return_statement();
+        }
         if self.match_token(&[TokenType::LeftBrace]) {
             return self.block_statement();
         }
         return self.expr_statement();
+    }
+
+    fn return_statement(&mut self) -> Result<Statement, ParseError> {
+        let keyword = self.previous_token().clone();
+        let mut value: Option<Expr> = None;
+        if !self.check(&TokenType::Semicolon) {
+            match self.expression() {
+                Ok(expr) => {
+                    value = Some(expr);
+                }
+                Err(err) => return Err(err),
+            }
+        }
+        self.consume(TokenType::Semicolon)?;
+        Ok(Statement::Return(keyword, value))
     }
 
     fn if_statement(&mut self) -> Result<Statement, ParseError> {
@@ -648,6 +667,7 @@ fn print_ast(statement: &Statement) -> String {
             result.push_str(&print_block_ast(block));
             result
         }
+        Statement::Return(_, _) => String::from("return"),
     }
 }
 
