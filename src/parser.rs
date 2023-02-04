@@ -123,42 +123,39 @@ impl Parser {
     }
 
     fn function_declaration(&mut self) -> Result<Statement, ParseError> {
-        self.consume(TokenType::Identifier).and_then(|name_token| {
-            self.consume(TokenType::LeftParen).and_then(|_| {
-                let mut params: Vec<Token> = vec![];
-                if !self.check(&TokenType::RightParen) {
-                    loop {
-                        match self.consume(TokenType::Identifier) {
-                            Ok(param) => {
-                                params.push(param);
-                            }
-                            Err(err) => return Err(err),
-                        }
-                        if !self.match_token(&[TokenType::Comma]) {
-                            break;
-                        }
+        let name_token = self.consume(TokenType::Identifier)?;
+
+        self.consume(TokenType::LeftParen)?;
+        let mut params: Vec<Token> = vec![];
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                match self.consume(TokenType::Identifier) {
+                    Ok(param) => {
+                        params.push(param);
                     }
+                    Err(err) => return Err(err),
                 }
-                self.consume(TokenType::RightParen).and_then(|_| {
-                    self.consume(TokenType::LeftBrace).and_then(|_| {
-                        let mut statements: Vec<Statement> = vec![];
-                        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
-                            match self.declaration() {
-                                Ok(statement) => {
-                                    statements.push(statement);
-                                }
-                                Err(err) => return Err(err),
-                            }
-                        }
-                        self.consume(TokenType::RightBrace)
-                            .map(|_| Statement::Function {
-                                name: name_token,
-                                params,
-                                block: statements,
-                            })
-                    })
-                })
-            })
+                if !self.match_token(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen)?;
+        self.consume(TokenType::LeftBrace)?;
+        let mut statements: Vec<Statement> = vec![];
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+            match self.declaration() {
+                Ok(statement) => {
+                    statements.push(statement);
+                }
+                Err(err) => return Err(err),
+            }
+        }
+        self.consume(TokenType::RightBrace)?;
+        Ok(Statement::Function {
+            name: name_token,
+            params,
+            block: statements,
         })
     }
 
