@@ -1,4 +1,5 @@
 use crate::scanner::{Literal, Token, TokenType};
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -43,6 +44,25 @@ pub enum BinaryOperator {
     LessEqual,
     And,
     Or,
+}
+
+impl Display for BinaryOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryOperator::Minus => write!(f, "-"),
+            BinaryOperator::Plus => write!(f, "+"),
+            BinaryOperator::Slash => write!(f, "/"),
+            BinaryOperator::Star => write!(f, "*"),
+            BinaryOperator::BangEqual => write!(f, "!="),
+            BinaryOperator::EqualEqual => write!(f, "=="),
+            BinaryOperator::Greater => write!(f, ">"),
+            BinaryOperator::GreaterEqual => write!(f, ">="),
+            BinaryOperator::Less => write!(f, "<"),
+            BinaryOperator::LessEqual => write!(f, "<="),
+            BinaryOperator::And => write!(f, "and"),
+            BinaryOperator::Or => write!(f, "or"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

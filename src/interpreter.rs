@@ -1,14 +1,27 @@
 use crate::environment::Environment;
 use crate::parser::{BinaryOperator, Expr, LiteralValue, Statement};
-use crate::scanner::Token;
-use std::fmt::Formatter;
+use std::cell::RefCell;
+
+use std::fmt::{Debug, Display, Formatter};
+use std::rc::Rc;
 
 #[derive(PartialEq, Debug)]
 pub enum RuntimeError {
-    Runtime,
+    Runtime { message: String },
     InvalidFunction,
     UndefinedVariable(String),
     Return(Value),
+}
+
+impl Display for RuntimeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeError::Runtime { message } => write!(f, "Runtime error: {}", message),
+            RuntimeError::InvalidFunction => write!(f, "Invalid function"),
+            RuntimeError::UndefinedVariable(name) => write!(f, "Undefined variable {}", name),
+            RuntimeError::Return(value) => write!(f, "Return {}", value),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -40,17 +53,31 @@ pub enum Value {
         name: String,
         params: Vec<String>,
         body: Vec<Statement>,
+        closure: Rc<RefCell<Environment>>,
     },
 }
 
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Number(n) => write!(f, "{}", n),
+            Value::String(s) => write!(f, "{}", s),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Nil => write!(f, "nil"),
+            Value::NativeFunction(nf) => write!(f, "{}", nf.name),
+            Value::Function { name, .. } => write!(f, "function {}()", name),
+        }
+    }
+}
+
 pub struct Interpreter {
-    env: Environment,
+    env: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         let mut env = Environment::new();
-        env.define(
+        env.borrow_mut().define(
             String::from("clock"),
             Value::NativeFunction(NativeFunction {
                 name: String::from("clock"),
@@ -121,7 +148,12 @@ impl Interpreter {
             (Value::Number(a), BinaryOperator::EqualEqual, Value::Number(b)) => {
                 return Ok(Value::Bool(a == b))
             }
-            _ => Err(RuntimeError::Runtime),
+            (l, op, r) => {
+                let error = format!("Invalid operation: {} {} {}", l, op, r);
+                Err(RuntimeError::Runtime {
+                    message: String::from(error),
+                })
+            }
         }
     }
 
@@ -139,17 +171,15 @@ impl Interpreter {
             },
             Expr::Variable(token) => {
                 let name = String::from_utf8(token.lexeme.clone()).unwrap();
-                return match self.env.get(name) {
+                return match self.env.borrow().get(name) {
                     None => Ok(Value::Nil),
-                    Some(value) => {
-                        let v = value.clone();
-                        Ok(v)
-                    }
+                    Some(value) => Ok(value),
                 };
             }
             Expr::Assignment(name, expr) => match self.evaluate_expression(expr) {
                 Ok(value) => self
                     .env
+                    .borrow_mut()
                     .assign(String::from(name), value)
                     .map(|_| Value::Nil),
                 Err(err) => {
@@ -167,10 +197,16 @@ impl Interpreter {
 
                 match callee {
                     Value::NativeFunction(fun) => (fun.callable)(evaluated_args.as_slice()),
-                    Value::Function { name, params, body } => {
-                        let mut env = Environment::new_with_enclosing(self.env.clone());
+                    Value::Function {
+                        name: _,
+                        params,
+                        closure,
+                        body,
+                    } => {
+                        let mut env = Environment::new_with_enclosing(closure);
                         for (i, arg) in params.iter().enumerate() {
-                            env.define(arg.clone(), evaluated_args[i].clone());
+                            env.borrow_mut()
+                                .define(arg.clone(), evaluated_args[i].clone());
                         }
                         let mut interpreter = Interpreter { env };
                         for statement in body {
@@ -219,12 +255,12 @@ impl Interpreter {
                 let name = String::from_utf8(name.lexeme.clone()).unwrap();
                 return match expr {
                     None => {
-                        self.env.define(name, Value::Nil);
+                        self.env.borrow_mut().define(name, Value::Nil);
                         Ok(())
                     }
                     Some(expr) => match self.evaluate_expression(expr) {
                         Ok(value) => {
-                            self.env.define(name, value);
+                            self.env.borrow_mut().define(name, value);
                             Ok(())
                         }
                         Err(runtime_error) => Err(runtime_error),
@@ -236,7 +272,6 @@ impl Interpreter {
                 self.env = env;
                 match self.evaluate(statements) {
                     Ok(result) => {
-                        self.env = *self.env.enclosing.clone().unwrap();
                         return Ok(result);
                     }
                     Err(err) => {
@@ -269,9 +304,10 @@ impl Interpreter {
                         .iter()
                         .map(|p| String::from_utf8(p.lexeme.clone()).unwrap())
                         .collect(),
+                    closure: self.env.clone(),
                     body: block.clone(),
                 };
-                self.env.define(name, function);
+                self.env.borrow_mut().define(name, function);
             }
             Statement::Return(_, return_value) => match return_value {
                 None => {
@@ -346,5 +382,30 @@ mod tests {
         let mut interpreter = Interpreter::new();
         let result = interpreter.evaluate(&statements);
         assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn test_closure() {
+        let input = "
+fun makeCounter() {
+    var i = 0;
+    fun count() {
+        i = i + 1;
+        print i;
+    }
+    
+    return count;
+}
+
+var counter = makeCounter();
+counter();
+
+        ";
+        let tokens = scanner::scan(String::from(input));
+        let statements = parse(tokens).unwrap();
+        let mut interpreter = Interpreter::new();
+        let result = interpreter.evaluate(&statements);
+
+        assert!(result.is_ok());
     }
 }

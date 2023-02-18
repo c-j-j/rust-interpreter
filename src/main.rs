@@ -45,7 +45,9 @@ fn run(buffer: String, interpretter: &mut Interpreter) {
 
     match parser::parse(tokens) {
         Ok(statements) => match interpretter.evaluate(&statements) {
-            Err(runtime_err) => println!("runtime error {:?}", runtime_err),
+            Err(runtime_err) => {
+                println!("runtime error {}", runtime_err)
+            }
             _ => {
                 println!()
             }
